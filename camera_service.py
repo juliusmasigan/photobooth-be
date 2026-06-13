@@ -82,7 +82,7 @@ class CameraService:
             "raw_output": stdout
         }
 
-    async def capture_photo(self, output_dir: str, event_callback: Optional[callable] = None) -> str:
+    async def capture_photo(self, output_dir: str, file_prefix: str, event_callback: Optional[callable] = None) -> str:
         """
         Triggers the camera to capture an image and download it to output_dir.
         Returns the filename of the downloaded image.
@@ -96,7 +96,7 @@ class CameraService:
         # We use a timestamp-based filename format to avoid conflicts
         timestamp = time.strftime("%Y%m%d_%H%M%S")
         ms = int((time.time() % 1) * 1000)
-        filename = f"photo_{timestamp}_{ms:03d}.jpg"
+        filename = f"{file_prefix}_{timestamp}_{ms:03d}.jpg"
         filepath = os.path.join(output_dir, filename)
         
         # --capture-image-and-download takes the picture and pulls it from the camera RAM/SD
@@ -137,7 +137,15 @@ class CameraService:
         # Open the capture device
         # We run this in a thread to not block the event loop
         device_id: int = self._live_view_usb_device_id
-        cap = await asyncio.to_thread(cv2.VideoCapture, device_id)
+        
+        def _open_camera():
+            c = cv2.VideoCapture(device_id)
+            # Request 1080p to maintain 16:9 aspect ratio and avoid distortion
+            c.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+            c.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+            return c
+            
+        cap = await asyncio.to_thread(_open_camera)
         
         if not cap.isOpened():
             raise CameraError(f"Cannot open capture device {device_id}")
@@ -169,7 +177,7 @@ class CameraService:
             self._latest_frame = None
             await asyncio.to_thread(cap.release)
 
-    async def capture_from_stream(self, output_dir: str, event_callback: Optional[callable] = None) -> str:
+    async def capture_from_stream(self, output_dir: str, file_prefix: str, event_callback: Optional[callable] = None) -> str:
         """
         Captures a frame from the stream (either using the active stream's latest frame
         or opening the device temporarily) and saves it to output_dir.
@@ -177,49 +185,34 @@ class CameraService:
         device_id: int = self._live_view_usb_device_id
         os.makedirs(output_dir, exist_ok=True)
 
-        if event_callback:
-            await event_callback({"type": "camera_action", "action": "capture_initiated"})
-
         timestamp = time.strftime("%Y%m%d_%H%M%S")
         ms = int((time.time() % 1) * 1000)
-        filename = f"photo_stream_{timestamp}_{ms:03d}.jpg"
+        filename = f"{file_prefix}_{timestamp}_{ms:03d}.jpg"
         filepath = os.path.join(output_dir, filename)
         
         # We use a lock to avoid multiple requests trying to read from the camera simultaneously
         async with self._capture_lock:
             if self._latest_frame is not None:
-                if event_callback:
-                    await event_callback({"type": "camera_action", "action": "capturing_image"})
 
                 # Stream is active, use a copy of the latest frame to prevent concurrent mutation
                 frame_to_save = self._latest_frame.copy()
                 success = await asyncio.to_thread(cv2.imwrite, filepath, frame_to_save)
                 if not success:
-                    if event_callback:
-                        await event_callback({"type": "camera_action", "action": "capture_failed"})
                     raise CameraError("Failed to save frame from active stream.")
-                if event_callback:
-                    await event_callback({"type": "camera_action", "action": "capture_completed", "filename": filename})
                 return filename
                 
             # Stream is not active, temporarily open the device
             def _grab_frame():
-                if event_callback:
-                    asyncio.run(event_callback({"type": "camera_action", "action": "capturing_image"}))
-
                 cap = cv2.VideoCapture(device_id)
+                # Request 1080p to maintain 16:9 aspect ratio and avoid distortion
+                cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
                 if not cap.isOpened():
-                    if event_callback:
-                        asyncio.run(event_callback({"type": "camera_action", "action": "capture_failed"}))
                     raise CameraError(f"Cannot open capture device {device_id}")
                 success, frame = cap.read()
                 cap.release()
                 if not success:
-                    if event_callback:
-                        asyncio.run(event_callback({"type": "camera_action", "action": "capture_failed"}))
                     raise CameraError("Failed to read frame from capture device.")
                 cv2.imwrite(filepath, frame)
-                if event_callback:
-                    asyncio.run(event_callback({"type": "camera_action", "action": "capture_completed", "filename": filename}))
             await asyncio.to_thread(_grab_frame)
             return filename

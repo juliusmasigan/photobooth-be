@@ -82,7 +82,7 @@ app.add_middleware(
 )
 
 # Create a photos directory to store the images
-PHOTOS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "photos")
+PHOTOS_DIR = os.getenv("PHOTOS_DIR", "photos")
 os.makedirs(PHOTOS_DIR, exist_ok=True)
 
 # Mount a static directory so we can access downloaded images via URL
@@ -104,9 +104,31 @@ class CaptureResponse(BaseModel):
     url: str | None = None
     error: str | None = None
 
+class PhotoListResponse(BaseModel):
+    photos: List[str]
+
 @app.get("/", tags=["General"])
 async def read_root():
     return {"message": "DSLR Camera Controller API is running. Check /docs for API documentation."}
+
+@app.get("/api/photos", response_model=PhotoListResponse, tags=["Photos"])
+async def list_photos(prefix: str):
+    """
+    List all photo URLs with a given prefix.
+    """
+    if not os.path.exists(PHOTOS_DIR):
+        return PhotoListResponse(photos=[])
+    
+    photos = []
+    try:
+        for filename in os.listdir(PHOTOS_DIR):
+            if filename.startswith(prefix) and os.path.isfile(os.path.join(PHOTOS_DIR, filename)):
+                photos.append(f"/photos/{filename}")
+        photos.sort()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reading photos directory: {str(e)}")
+        
+    return PhotoListResponse(photos=photos)
 
 @app.get("/api/status", response_model=StatusResponse, tags=["Camera"])
 async def get_camera_status():
@@ -142,9 +164,9 @@ async def capture_photo(request: CaptureRequest | None = None):
             await manager.broadcast(event_data)
         
         if capture_method == "stream":
-            filename = await camera.capture_from_stream(PHOTOS_DIR, event_callback=on_camera_event)
+            filename = await camera.capture_from_stream(PHOTOS_DIR, session_id, event_callback=on_camera_event)
         else:
-            filename = await camera.capture_photo(PHOTOS_DIR, event_callback=on_camera_event)
+            filename = await camera.capture_photo(PHOTOS_DIR, session_id, event_callback=on_camera_event)
         
         # Construct the URL for the frontend to access the image
         # In a real deployed app, you might need to use request.base_url to form absolute URLs
