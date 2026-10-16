@@ -9,12 +9,19 @@ import uvicorn
 import asyncio
 from typing import List
 from dotenv import load_dotenv
+from operator import itemgetter
+from datetime import datetime, timedelta
 
 from camera_service import CameraService, CameraError
 
 load_dotenv()
 
+# "dslr" (gphoto2 capture + HDMI capture card live view) or "webcam" (USB webcam for both)
+CAMERA_TYPE = os.getenv("CAMERA_TYPE", "dslr")
+# Device index (e.g. 2) or path (e.g. /dev/v4l/by-id/...) of the capture card used in dslr mode
 LIVE_VIEW_USB_DEVICE_ID = os.getenv("LIVE_VIEW_USB_DEVICE_ID")
+# Device index (e.g. 0) or path (e.g. /dev/v4l/by-id/...) of the webcam used in webcam mode
+WEBCAM_DEVICE = os.getenv("WEBCAM_DEVICE")
 
 # Connection Manager for WebSockets
 class ConnectionManager:
@@ -37,7 +44,11 @@ class ConnectionManager:
                 self.disconnect(connection)
 
 manager = ConnectionManager()
-camera = CameraService(live_view_usb_device_id=LIVE_VIEW_USB_DEVICE_ID)
+camera = CameraService(
+    camera_type=CAMERA_TYPE,
+    live_view_device=LIVE_VIEW_USB_DEVICE_ID,
+    webcam_device=WEBCAM_DEVICE,
+)
 
 async def poll_camera_status():
     last_status = None
@@ -67,7 +78,7 @@ async def lifespan(app: FastAPI):
 # Setup FastAPI App
 app = FastAPI(
     title="DSLR Camera Controller API",
-    description="API to control DSLR cameras via gphoto2 for photobooth applications.",
+    description="API to control DSLR cameras via gphoto2, or USB webcams, for photobooth applications.",
     version="1.0.0",
     lifespan=lifespan
 )
@@ -104,31 +115,52 @@ class CaptureResponse(BaseModel):
     url: str | None = None
     error: str | None = None
 
+class PhotoResponse(BaseModel):
+    id: str
+    path: str
+    time: str
+
 class PhotoListResponse(BaseModel):
-    photos: List[str]
+    photos: List[PhotoResponse]
 
 @app.get("/", tags=["General"])
 async def read_root():
     return {"message": "DSLR Camera Controller API is running. Check /docs for API documentation."}
 
 @app.get("/api/photos", response_model=PhotoListResponse, tags=["Photos"])
-async def list_photos(prefix: str):
+async def list_photos(prefix: str = None):
     """
-    List all photo URLs with a given prefix.
+    List all photo URLs, newest first.
     """
     if not os.path.exists(PHOTOS_DIR):
         return PhotoListResponse(photos=[])
-    
-    photos = []
+
     try:
-        for filename in os.listdir(PHOTOS_DIR):
-            if filename.startswith(prefix) and os.path.isfile(os.path.join(PHOTOS_DIR, filename)):
-                photos.append(f"/photos/{filename}")
-        photos.sort()
+        # Photos are written once and never modified, so mtime is their creation time
+        entries: List = []
+        with os.scandir(PHOTOS_DIR) as it:
+            for entry in it:
+                captured_time = datetime.fromtimestamp(entry.stat().st_mtime)
+                elapsed_time = datetime.now() - captured_time
+                if entry.is_file() and not prefix:
+                    entries.append({
+                        'id': entry.name.split("_")[0],
+                        'captured_time': captured_time,
+                        'time': f"{int(elapsed_time.seconds // 3600)}h {int(elapsed_time.seconds % 60)}m ago",
+                        'path': f"/photos/{entry.name}"
+                    })
+                elif entry.is_file() and entry.name.startswith(prefix):
+                    entries.append({
+                        'id': entry.name.split("_")[0],
+                        'captured_time': captured_time,
+                        'time': f"{int(elapsed_time.seconds // 3600)}h {int(elapsed_time.seconds % 60)}m ago",
+                        'path': f"/photos/{entry.name}"
+                    })
+        entries.sort(key=itemgetter('captured_time'), reverse=True)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error reading photos directory: {str(e)}")
         
-    return PhotoListResponse(photos=photos)
+    return PhotoListResponse(photos=entries)
 
 @app.get("/api/status", response_model=StatusResponse, tags=["Camera"])
 async def get_camera_status():
