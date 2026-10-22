@@ -1,0 +1,34 @@
+{
+    "collage": [
+        {
+            "id": 1,
+            "name": "Theme 1",
+            "url": "/designs/collage/1.svg",
+            "imgIds": ["image1", "image2", "image3"]
+        }
+    ],
+    "still": [
+        {
+            "id": 1,
+            "name": "Theme 1",
+            "url": "/designs/still/1.svg",
+            "imgIds": ["image1"]
+        }
+    ],
+    "boomerang": [
+        {
+            "id": 1,
+            "name": "Theme 1",
+            "url": "/designs/boomerang/1.svg",
+            "imgIds": ["image1"]
+        }
+    ],
+    "gif": [
+        {
+            "id": 1,
+            "name": "Theme 1",
+            "url": "/designs/gif/1.svg",
+            "imgIds": ["image1"]
+        }
+    ]
+}

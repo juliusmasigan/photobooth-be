@@ -1,0 +1,33 @@
+{
+  "stickers": [
+    {
+      "id": "sunglasses",
+      "name": "Sunglasses",
+      "layers": [
+        {"image": "sunglasses.png", "anchor": "eyes", "width": 2.4, "offset": [0, 0.05]}
+      ]
+    },
+    {
+      "id": "mustache",
+      "name": "Mustache",
+      "layers": [
+        {"image": "mustache.png", "anchor": "upper_lip", "width": 1.4, "offset": [0, 0.02], "pivot": [0.5, 0.4]}
+      ]
+    },
+    {
+      "id": "crown",
+      "name": "Crown",
+      "layers": [
+        {"image": "crown.png", "anchor": "forehead", "width": 2.2, "offset": [0, -0.12], "pivot": [0.5, 1.0]}
+      ]
+    },
+    {
+      "id": "dog",
+      "name": "Puppy",
+      "layers": [
+        {"image": "dog_ears.png", "anchor": "forehead", "width": 3.6, "offset": [0, 0.1], "pivot": [0.5, 0.75]},
+        {"image": "dog_nose.png", "anchor": "nose", "width": 0.75, "offset": [0, -0.05]}
+      ]
+    }
+  ]
+}

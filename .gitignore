@@ -62,6 +62,7 @@ venv.bak/
 
 # Project Specific
 photos/
+prints/
 
 # IDE / OS
 .vscode/
@@ -69,3 +70,6 @@ photos/
 __pycache__/
 *.swp
 .DS_Store
+
+# Face landmarker model, downloaded on first use
+models/
