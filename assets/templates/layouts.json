@@ -5,6 +5,12 @@
             "name": "Theme 1",
             "url": "/designs/collage/1.svg",
             "imgIds": ["image1", "image2", "image3"]
+        },
+        {
+            "id": 2,
+            "name": "Theme 2",
+            "url": "/designs/collage/2.svg",
+            "imgIds": ["image1", "image2", "image3"]
         }
     ],
     "still": [
